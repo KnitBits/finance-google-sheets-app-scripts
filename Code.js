@@ -39,9 +39,13 @@ function generateMultiYearBreakdown() {
   headerRow.push("Total");
   wsOutput.appendRow(headerRow);
 
-  var outputData = [];
+  var outputData = {
+    income: [],
+    expense: [],
+  };
 
   data.forEach((row) => {
+    var isIncome = row[0] === "Income";
     var description = row[1];
     var amount = row[2];
     var startDate = new Date(row[3]);
@@ -81,23 +85,66 @@ function generateMultiYearBreakdown() {
       }
     }
 
-    outputData.push(rowData);
+    outputData[isIncome ? "income" : "expense"].push(rowData);
   });
 
-  // Append data rows
-  wsOutput
-    .getRange(2, 1, outputData.length, outputData[0].length)
-    .setValues(outputData);
+  let lastRow = 0;
 
-  // Set total formulas
-  for (var r = 2; r <= outputData.length + 1; r++) {
-    var totalFormula = `=SUM(B${r}:${String.fromCharCode(
-      65 + monthCount
-    )}${r})`;
-    wsOutput.getRange(r, monthCount + 2).setFormula(totalFormula);
-  }
+  const incomeResultStartRow = 2;
+  lastRow = renderResult(
+    wsOutput,
+    incomeResultStartRow,
+    outputData["income"],
+    "Income"
+  );
+
+  const expenseResultStartRow = lastRow + 2;
+  lastRow = renderResult(
+    wsOutput,
+    expenseResultStartRow,
+    outputData["expense"],
+    "Expense"
+  );
 
   // Format headers
   wsOutput.getRange(1, 1, 1, monthCount + 2).setFontWeight("bold");
   wsOutput.autoResizeColumns(1, monthCount + 2);
+}
+
+function renderResult(wsOutput, startRow, outputData, title) {
+  let row = startRow;
+  const startCol = "B";
+  const endCol = String.fromCharCode(63 + outputData[0].length);
+
+  wsOutput
+    .getRange(startRow, 1, 1, 1)
+    .setValues([[title]])
+    .setFontWeight("bold");
+
+  // Append data rows
+  row = row + 1;
+  wsOutput
+    .getRange(row, 1, outputData.length, outputData[0].length)
+    .setValues(outputData);
+
+  // Set total formulas
+  for (var r = row; r < outputData.length + row; r++) {
+    var totalFormula = `=SUM(${startCol}${r}:${endCol}${r})`;
+    wsOutput.getRange(r, outputData[0].length).setFormula(totalFormula);
+  }
+
+  row += outputData.length;
+
+  wsOutput
+    .getRange(row, 1, 1, 1)
+    .setValues([["Total " + title]])
+    .setFontWeight("bold");
+
+  for (var c = 0; c < outputData[0].length - 1; c++) {
+    const column = String.fromCharCode(66 + c);
+    var totalFormula = `=SUM(${column}${startRow + 1}:${column}${row - 1})`;
+    wsOutput.getRange(row, c + 2).setFormula(totalFormula);
+  }
+
+  return row + 1;
 }
