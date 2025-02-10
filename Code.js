@@ -91,20 +91,22 @@ function generateMultiYearBreakdown() {
   let lastRow = 0;
 
   const incomeResultStartRow = 2;
-  lastRow = renderResult(
+  const incomeLastRow = renderResult(
     wsOutput,
     incomeResultStartRow,
     outputData["income"],
     "Income"
   );
 
-  const expenseResultStartRow = lastRow + 2;
-  lastRow = renderResult(
+  const expenseResultStartRow = incomeLastRow + 2;
+  const expenseLastRow = renderResult(
     wsOutput,
     expenseResultStartRow,
     outputData["expense"],
     "Expense"
   );
+
+  renderReport(wsOutput, incomeLastRow, expenseLastRow, monthCount);
 
   // Format headers
   wsOutput.getRange(1, 1, 1, monthCount + 2).setFontWeight("bold");
@@ -146,5 +148,47 @@ function renderResult(wsOutput, startRow, outputData, title) {
     wsOutput.getRange(row, c + 2).setFormula(totalFormula);
   }
 
-  return row + 1;
+  return row;
+}
+
+function renderReport(wsOutput, incomeLastRow, expenseLastRow, columnCount) {
+  let row = expenseLastRow + 2;
+
+  wsOutput
+    .getRange(row, 1, 5, 1)
+    .setValues([
+      ["Total Income"],
+      ["Total Expense"],
+      ["Net Cashflow"],
+      [""],
+      ["Cumulative Surplus/Deficit"],
+    ])
+    .setFontWeight("bold");
+
+  let prevColumn = "";
+
+  Array(columnCount + 1)
+    .fill("")
+    .forEach((_, index) => {
+      const column = String.fromCharCode(65 + 1 + index);
+
+      const incomeFormula = `=${column}${incomeLastRow}`;
+      wsOutput.getRange(row, index + 2).setFormula(incomeFormula);
+
+      const expenseFormula = `=${column}${expenseLastRow}`;
+      wsOutput.getRange(row + 1, index + 2).setFormula(expenseFormula);
+
+      const cashflowFormula = `=${column}${row} - ${column}${row + 1}`;
+      wsOutput.getRange(row + 2, index + 2).setFormula(cashflowFormula);
+
+      const cumRow = row + 4;
+
+      let cumFormula = `=${prevColumn}${cumRow} + ${column}${cumRow - 2}`;
+      if (!prevColumn || index === columnCount) {
+        cumFormula = `${column}${cumRow - 2}`;
+      }
+      wsOutput.getRange(cumRow, index + 2).setFormula(cumFormula);
+
+      prevColumn = column;
+    });
 }
