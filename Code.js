@@ -1,9 +1,5 @@
-function onEdit(e) {
-  var sheet = e.source.getSheetByName("Input"); // Change to your actual input sheet name
-  if (e.range.getSheet().getName() === sheet.getName()) {
-    Logger.log("Will call generateMultiYearBreakdown");
-    generateMultiYearBreakdown();
-  }
+function onReportRecalculate() {
+  generateMultiYearBreakdown();
 }
 
 function generateMultiYearBreakdown() {
@@ -20,7 +16,6 @@ function generateMultiYearBreakdown() {
   wsOutput.clear();
 
   var data = wsInput.getDataRange().getValues();
-  var headers = data[0]; // Header row
   data.shift(); // Remove header
 
   if (data.length === 0) return;
@@ -63,11 +58,7 @@ function generateMultiYearBreakdown() {
       if (currentDate >= startDate && currentDate <= endDate) {
         if (frequency === "Monthly") {
           rowData[colIndex + 1] = amount;
-        } else if (frequency === "Bi Monthly") {
-          if (currentDate.getMonth() % 2 === startDate.getMonth() % 2) {
-            rowData[colIndex + 1] = amount;
-          }
-        } else if (frequency === "Bi Weekly") {
+        } else if (frequency === "Bi-Monthly") {
           var totalPayments = 0;
           var paymentDate = new Date(startDate);
 
