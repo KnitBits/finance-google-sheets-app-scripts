@@ -1,5 +1,6 @@
 function onReportRecalculate() {
   generateMultiYearBreakdown();
+  generateFinancialLedger();
 }
 
 function generateMultiYearBreakdown() {
@@ -191,4 +192,87 @@ function renderReport(wsOutput, incomeLastRow, expenseLastRow, columnCount) {
 
       prevColumn = column;
     });
+}
+
+function generateFinancialLedger() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const inputSheet = ss.getSheetByName("Input"); // Assuming the data is in a sheet named "Input"
+  const outputSheet = ss.getSheetByName("Ledger") || ss.insertSheet("Ledger"); // Create or use existing "Ledger" sheet
+
+  // Create sheet if it doesn't exist
+  if (!outputSheet) {
+    outputSheet = ss.insertSheet("Ledger");
+  }
+
+  // Clear the existing data in Ledger sheet
+  outputSheet.clear();
+
+  // Setup headers for the ledger
+  outputSheet.appendRow(["Date", "Credit", "Debit", "Balance"]);
+  outputSheet.getRange(1, 1, 1, 4).setFontWeight("bold");
+
+  const inputData = inputSheet
+    .getRange("A2:G" + inputSheet.getLastRow())
+    .getValues();
+  let transactions = [];
+  let balance = 0;
+
+  inputData.forEach((row) => {
+    const type = row[0]; // Income or Expense
+    const description = row[1];
+    const amount = row[2];
+    const startDate = new Date(row[3]);
+    const endDate = new Date(row[4]);
+    const frequency = row[5];
+
+    // Determine the number of periods and distribute the amounts
+    const periods = getPeriods(startDate, endDate, frequency);
+
+    periods.forEach((date) => {
+      transactions.push({
+        date: date,
+        credit: type === "Income" ? amount : 0,
+        debit: type === "Expense" ? amount : 0,
+      });
+    });
+  });
+
+  // Sort transactions by date
+  transactions.sort((a, b) => a.date - b.date);
+
+  // Compute the running balance and write to the ledger
+  transactions.forEach(({ credit, debit, date }) => {
+    balance += credit - debit;
+    outputSheet.appendRow([
+      Utilities.formatDate(date, "GMT", "MM/dd/yyyy"),
+      credit ? Number(credit).toFixed(2) : "",
+      debit ? `-${Number(debit).toFixed(2)}` : "",
+      Number(balance).toFixed(2),
+    ]);
+  });
+
+  outputSheet.autoResizeColumns(1, 4);
+}
+
+// Helper function to calculate periods based on frequency
+function getPeriods(start, end, frequency) {
+  let periods = [];
+  let currentDate = new Date(start);
+
+  while (currentDate <= end) {
+    periods.push(new Date(currentDate)); // Clone the date
+    switch (frequency) {
+      case "Monthly":
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        break;
+      case "Bi-Monthly":
+        currentDate.setDate(currentDate.getDate() + 14);
+        break;
+      default:
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        break;
+    }
+  }
+
+  return periods;
 }
