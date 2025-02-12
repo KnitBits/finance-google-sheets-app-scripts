@@ -102,6 +102,14 @@ function generateMultiYearBreakdown() {
 }
 
 function renderResult(wsOutput, startRow, outputData, title) {
+  if (!outputData.length) {
+    wsOutput
+      .getRange(startRow, 1, 2, 1)
+      .setValues([[title], ["Total " + title]])
+      .setFontWeight("bold");
+    return startRow + 2;
+  }
+
   let row = startRow;
   const startCol = "B";
   const endCol = String.fromCharCode(63 + outputData[0].length);
