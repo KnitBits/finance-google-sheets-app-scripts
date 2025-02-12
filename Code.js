@@ -40,6 +40,11 @@ function generateMultiYearBreakdown() {
   headerRow.push("Total");
   wsOutput.appendRow(headerRow);
 
+  const monthKeys = headerRow.slice(1, -1);
+  const zeroValueByMonth = (result = Object.fromEntries(
+    monthKeys.map((month) => [month, 0])
+  ));
+
   var outputData = {
     income: [],
     expense: [],
@@ -52,44 +57,26 @@ function generateMultiYearBreakdown() {
     var startDate = new Date(row[3]);
     var endDate = new Date(row[4]);
     var frequency = row[5];
-    var rowData = new Array(monthCount + 2).fill(""); // Empty row
 
-    rowData[0] = description;
+    const valueByMonth = { ...zeroValueByMonth };
+    let totalAmount = 0;
 
-    for (var colIndex = 0; colIndex < monthCount; colIndex++) {
-      var currentDate = new Date(earliestDate);
-      currentDate.setMonth(currentDate.getMonth() + colIndex);
+    const periods = getPeriods(startDate, endDate, frequency);
+    periods.forEach((date) => {
+      const monthKey = Utilities.formatDate(
+        date,
+        Session.getScriptTimeZone(),
+        "MMM yy"
+      );
+      valueByMonth[monthKey] += amount;
+      totalAmount += amount;
+    });
 
-      if (currentDate >= startDate && currentDate <= endDate) {
-        if (frequency === "Monthly") {
-          rowData[colIndex + 1] = amount;
-        } else if (frequency === "Bi-Monthly") {
-          var totalPayments = 0;
-          var paymentDate = new Date(startDate);
+    const values = Array.from(Object.values(valueByMonth));
+    const rawData = [description, ...values, totalAmount];
 
-          while (paymentDate <= endDate) {
-            if (
-              paymentDate >= currentDate &&
-              paymentDate <
-                new Date(
-                  currentDate.getFullYear(),
-                  currentDate.getMonth() + 1,
-                  1
-                )
-            ) {
-              totalPayments += amount;
-            }
-            paymentDate.setDate(paymentDate.getDate() + 14); // Add 2 weeks
-          }
-          rowData[colIndex + 1] = totalPayments;
-        }
-      }
-    }
-
-    outputData[isIncome ? "income" : "expense"].push(rowData);
+    outputData[isIncome ? "income" : "expense"].push(rawData);
   });
-
-  let lastRow = 0;
 
   const incomeResultStartRow = 2;
   const incomeLastRow = renderResult(
@@ -262,15 +249,32 @@ function getPeriods(start, end, frequency) {
   while (currentDate <= end) {
     periods.push(new Date(currentDate)); // Clone the date
     switch (frequency) {
+      case "Daily":
+        currentDate.setDate(currentDate.getDate() + 1);
+        break;
+      case "Weekly":
+        currentDate.setDate(currentDate.getDate() + 7);
+        break;
+      case "Bi-Weekly":
+        currentDate.setDate(currentDate.getDate() + 14);
+        break;
       case "Monthly":
         currentDate.setMonth(currentDate.getMonth() + 1);
         break;
       case "Bi-Monthly":
-        currentDate.setDate(currentDate.getDate() + 14);
+        currentDate.setMonth(currentDate.getMonth() + 2);
+        break;
+      case "Quarterly":
+        currentDate.setMonth(currentDate.getMonth() + 3);
+        break;
+      case "Semi-Annually":
+        currentDate.setMonth(currentDate.getMonth() + 6);
+        break;
+      case "Annually":
+        currentDate.setFullYear(currentDate.getFullYear() + 1);
         break;
       default:
-        currentDate.setMonth(currentDate.getMonth() + 1);
-        break;
+        throw new Error("Invalid interval");
     }
   }
 
