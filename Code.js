@@ -1,6 +1,78 @@
 function onReportRecalculate() {
   generateMultiYearBreakdown();
-  generateFinancialLedger();
+  // generateFinancialLedger();
+}
+
+function splitData(data) {
+  let index;
+  const totalRows = data.length;
+  const incomes = [];
+  const expensesGroups = {};
+
+  for (index = 1; index < totalRows; index++) {
+    if (data[index][0] !== "Income") break;
+    incomes.push(data[index]);
+  }
+
+  index++; // to skip "Expenses"
+
+  while (index < totalRows) {
+    const expenseSubCategory = data[index][0];
+    expensesGroups[expenseSubCategory] = [];
+    index += 2; // to skip "Header"
+    if (index >= totalRows) break;
+
+    while (
+      index < totalRows &&
+      (data[index][0] === "Expense" || data[index][0] === "Income")
+    ) {
+      expensesGroups[expenseSubCategory].push(data[index]);
+      index++;
+    }
+  }
+
+  return { incomes, expensesGroups };
+}
+
+function getDataToRender(groupOfList, months) {
+  const zeroValueByMonth = Object.fromEntries(
+    months.map((month) => [month, 0])
+  );
+
+  const data = {};
+  const overallTotalAmount = { ...zeroValueByMonth, finalTotal: 0 };
+
+  Object.keys(groupOfList).forEach((key) => {
+    data[key] = [];
+    const list = groupOfList[key];
+
+    list.forEach((row) => {
+      var description = row[1];
+      var amount = row[2];
+      var startDate = new Date(row[3]);
+      var endDate = new Date(row[4]);
+      var frequency = row[5];
+
+      const valueByMonth = { ...zeroValueByMonth };
+      let totalAmount = 0;
+
+      const periods = getPeriods(startDate, endDate, frequency);
+      periods.forEach((date) => {
+        const monthKey = Utilities.formatDate(date, "GMT", "MMM yy");
+        valueByMonth[monthKey] += amount;
+        overallTotalAmount[monthKey] += amount;
+        totalAmount += amount;
+      });
+
+      const values = Array.from(Object.values(valueByMonth));
+      const rawData = [description, ...values, totalAmount];
+      overallTotalAmount["finalTotal"] += totalAmount;
+
+      data[key].push(rawData);
+    });
+  });
+
+  return { data, total: overallTotalAmount };
 }
 
 function generateMultiYearBreakdown() {
@@ -16,85 +88,101 @@ function generateMultiYearBreakdown() {
   // Clear output sheet
   wsOutput.clear();
 
-  var data = wsInput.getDataRange().getValues();
-  data.shift(); // Remove header
+  var data = wsInput
+    .getDataRange()
+    .getValues()
+    .filter((row) => !!row[0]);
+  data.shift(); // Remove 'Income' row & header row
+
+  const { incomes, expensesGroups } = splitData(data);
 
   if (data.length === 0) return;
 
-  var earliestDate = new Date(Math.min(...data.map((row) => new Date(row[3]))));
-  var latestDate = new Date(Math.max(...data.map((row) => new Date(row[4]))));
+  var earliestDate = new Date(
+    Math.min(...data.map((row) => new Date(row[3])).filter((d) => d.getTime()))
+  );
+  var latestDate = new Date(
+    Math.max(...data.map((row) => new Date(row[4])).filter((d) => d.getTime()))
+  );
   var monthCount =
     (latestDate.getFullYear() - earliestDate.getFullYear()) * 12 +
     (latestDate.getMonth() - earliestDate.getMonth()) +
     1;
 
   // Set up header row dynamically
-  var headerRow = ["Description"];
+  const months = [];
   for (var i = 0; i < monthCount; i++) {
     var currentDate = new Date(earliestDate);
     currentDate.setMonth(currentDate.getMonth() + i);
-    headerRow.push(
+    months.push(
       Utilities.formatDate(currentDate, Session.getScriptTimeZone(), "MMM yy")
     );
   }
-  headerRow.push("Total");
+  var headerRow = ["Description", ...months, "Total"];
   wsOutput.appendRow(headerRow);
 
-  const monthKeys = headerRow.slice(1, -1);
-  const zeroValueByMonth = (result = Object.fromEntries(
-    monthKeys.map((month) => [month, 0])
-  ));
+  const incomeReportToRender = getDataToRender({ incomes }, months);
+  const expenseReportToRender = getDataToRender(expensesGroups, months);
 
-  var outputData = {
-    income: [],
-    expense: [],
-  };
-
-  data.forEach((row) => {
-    var isIncome = row[0] === "Income";
-    var description = row[1];
-    var amount = row[2];
-    var startDate = new Date(row[3]);
-    var endDate = new Date(row[4]);
-    var frequency = row[5];
-
-    const valueByMonth = { ...zeroValueByMonth };
-    let totalAmount = 0;
-
-    const periods = getPeriods(startDate, endDate, frequency);
-    periods.forEach((date) => {
-      const monthKey = Utilities.formatDate(
-        date,
-        Session.getScriptTimeZone(),
-        "MMM yy"
-      );
-      valueByMonth[monthKey] += amount;
-      totalAmount += amount;
-    });
-
-    const values = Array.from(Object.values(valueByMonth));
-    const rawData = [description, ...values, totalAmount];
-
-    outputData[isIncome ? "income" : "expense"].push(rawData);
-  });
+  let rowIndex;
 
   const incomeResultStartRow = 2;
-  const incomeLastRow = renderResult(
-    wsOutput,
-    incomeResultStartRow,
-    outputData["income"],
-    "Income"
-  );
+  const incomeReportData = incomeReportToRender.data["incomes"];
+  wsOutput
+    .getRange(incomeResultStartRow, 1)
+    .setValues([["Income"]])
+    .setFontWeight("bold");
+  wsOutput
+    .getRange(
+      incomeResultStartRow + 1,
+      1,
+      incomeReportData.length,
+      monthCount + 2
+    )
+    .setValues(incomeReportData);
+  wsOutput
+    .getRange(
+      incomeResultStartRow + incomeReportData.length + 1,
+      1,
+      1,
+      monthCount + 2
+    )
+    .setValues([["Total", ...Object.values(incomeReportToRender.total)]]);
+  wsOutput
+    .getRange(incomeResultStartRow + incomeReportData.length + 1, 1)
+    .setFontWeight("bold");
 
-  const expenseResultStartRow = incomeLastRow + 2;
-  const expenseLastRow = renderResult(
-    wsOutput,
-    expenseResultStartRow,
-    outputData["expense"],
-    "Expense"
-  );
+  const expenseResultStartRow =
+    incomeResultStartRow + 1 + incomeReportData.length + 2;
+  wsOutput
+    .getRange(expenseResultStartRow, 1)
+    .setValues([["Expense"]])
+    .setFontWeight("bold");
 
-  renderReport(wsOutput, incomeLastRow, expenseLastRow, monthCount);
+  rowIndex = expenseResultStartRow + 1;
+  Object.keys(expenseReportToRender.data).forEach((key) => {
+    const data = expenseReportToRender.data[key];
+
+    wsOutput
+      .getRange(rowIndex, 1)
+      .setValues([[key]])
+      .setFontWeight("bold");
+    wsOutput
+      .getRange(rowIndex + 1, 1, data.length, monthCount + 2)
+      .setValues(data);
+
+    rowIndex += data.length + 2;
+  });
+  wsOutput
+    .getRange(rowIndex - 1, 1, 1, monthCount + 2)
+    .setValues([["Total", ...Object.values(expenseReportToRender.total)]]);
+
+  renderReport(
+    wsOutput,
+    incomeResultStartRow + incomeReportData.length + 1,
+    rowIndex - 1,
+    monthCount
+  );
 
   // Format headers
   wsOutput.getRange(1, 1, 1, monthCount + 2).setFontWeight("bold");
@@ -147,6 +235,16 @@ function renderResult(wsOutput, startRow, outputData, title) {
   return row;
 }
 
+function columnNumberToA1(column) {
+  var letter = "";
+  while (column > 0) {
+    var temp = (column - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter; // Convert to letter (A=65, B=66, ...)
+    column = Math.floor((column - temp) / 26);
+  }
+  return letter;
+}
+
 function renderReport(wsOutput, incomeLastRow, expenseLastRow, columnCount) {
   let row = expenseLastRow + 2;
 
@@ -166,7 +264,7 @@ function renderReport(wsOutput, incomeLastRow, expenseLastRow, columnCount) {
   Array(columnCount + 1)
     .fill("")
     .forEach((_, index) => {
-      const column = String.fromCharCode(65 + 1 + index);
+      const column = columnNumberToA1(index + 2);
 
       const incomeFormula = `=${column}${incomeLastRow}`;
       wsOutput.getRange(row, index + 2).setFormula(incomeFormula);
@@ -256,6 +354,7 @@ function getPeriods(start, end, frequency) {
 
   while (currentDate <= end) {
     periods.push(new Date(currentDate)); // Clone the date
+    Date;
     switch (frequency) {
       case "Daily":
         currentDate.setDate(currentDate.getDate() + 1);
