@@ -1,6 +1,50 @@
+const PERIODS = {};
+
 function onReportRecalculate() {
-  generateMultiYearBreakdown();
-  // generateFinancialLedger();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var wsInput = ss.getSheetByName("Input");
+
+  var data = wsInput
+    .getDataRange()
+    .getValues()
+    .filter((row) => !!row[0]);
+  data.shift(); // Remove 'Income' row & header row
+
+  const { incomes, expensesGroups } = splitData(data);
+
+  var earliestDate = new Date(
+    Math.min(...data.map((row) => new Date(row[3])).filter((d) => d.getTime()))
+  );
+  var latestDate = new Date(
+    Math.max(...data.map((row) => new Date(row[4])).filter((d) => d.getTime()))
+  );
+  var monthCount =
+    (latestDate.getFullYear() - earliestDate.getFullYear()) * 12 +
+    (latestDate.getMonth() - earliestDate.getMonth()) +
+    1;
+
+  // Set up header row dynamically
+  const months = [];
+  for (var i = 0; i < monthCount; i++) {
+    var currentDate = new Date(earliestDate);
+    currentDate.setMonth(currentDate.getMonth() + i);
+    months.push(
+      Utilities.formatDate(currentDate, Session.getScriptTimeZone(), "MMM yy")
+    );
+  }
+
+  const incomeReportToRender = getDataToRender({ incomes }, months);
+  const expenseReportToRender = getDataToRender(expensesGroups, months);
+
+  generateMultiYearBreakdown(
+    incomeReportToRender,
+    expenseReportToRender,
+    months
+  );
+
+  const rows = [...incomes];
+  Object.values(expensesGroups).map((g) => rows.push(...g));
+  generateFinancialLedger(rows);
 }
 
 function splitData(data) {
@@ -57,6 +101,8 @@ function getDataToRender(groupOfList, months) {
       let totalAmount = 0;
 
       const periods = getPeriods(startDate, endDate, frequency);
+      PERIODS[`${startDate}-${endDate}-${frequency}`] = periods;
+
       periods.forEach((date) => {
         const monthKey = Utilities.formatDate(date, "GMT", "MMM yy");
         valueByMonth[monthKey] += amount;
@@ -75,9 +121,12 @@ function getDataToRender(groupOfList, months) {
   return { data, total: overallTotalAmount };
 }
 
-function generateMultiYearBreakdown() {
+function generateMultiYearBreakdown(
+  incomeReportToRender,
+  expenseReportToRender,
+  months
+) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var wsInput = ss.getSheetByName("Input");
   var wsOutput = ss.getSheetByName("Budget Projection");
 
   // Create sheet if it doesn't exist
@@ -88,41 +137,11 @@ function generateMultiYearBreakdown() {
   // Clear output sheet
   wsOutput.clear();
 
-  var data = wsInput
-    .getDataRange()
-    .getValues()
-    .filter((row) => !!row[0]);
-  data.shift(); // Remove 'Income' row & header row
-
-  const { incomes, expensesGroups } = splitData(data);
-
-  if (data.length === 0) return;
-
-  var earliestDate = new Date(
-    Math.min(...data.map((row) => new Date(row[3])).filter((d) => d.getTime()))
-  );
-  var latestDate = new Date(
-    Math.max(...data.map((row) => new Date(row[4])).filter((d) => d.getTime()))
-  );
-  var monthCount =
-    (latestDate.getFullYear() - earliestDate.getFullYear()) * 12 +
-    (latestDate.getMonth() - earliestDate.getMonth()) +
-    1;
+  const monthCount = months.length;
 
   // Set up header row dynamically
-  const months = [];
-  for (var i = 0; i < monthCount; i++) {
-    var currentDate = new Date(earliestDate);
-    currentDate.setMonth(currentDate.getMonth() + i);
-    months.push(
-      Utilities.formatDate(currentDate, Session.getScriptTimeZone(), "MMM yy")
-    );
-  }
   var headerRow = ["Description", ...months, "Total"];
   wsOutput.appendRow(headerRow);
-
-  const incomeReportToRender = getDataToRender({ incomes }, months);
-  const expenseReportToRender = getDataToRender(expensesGroups, months);
 
   let rowIndex;
 
@@ -132,14 +151,15 @@ function generateMultiYearBreakdown() {
     .getRange(incomeResultStartRow, 1)
     .setValues([["Income"]])
     .setFontWeight("bold");
-  wsOutput
-    .getRange(
-      incomeResultStartRow + 1,
-      1,
-      incomeReportData.length,
-      monthCount + 2
-    )
-    .setValues(incomeReportData);
+  incomeReportData.length &&
+    wsOutput
+      .getRange(
+        incomeResultStartRow + 1,
+        1,
+        incomeReportData.length,
+        monthCount + 2
+      )
+      .setValues(incomeReportData);
   wsOutput
     .getRange(
       incomeResultStartRow + incomeReportData.length + 1,
@@ -287,9 +307,8 @@ function renderReport(wsOutput, incomeLastRow, expenseLastRow, columnCount) {
     });
 }
 
-function generateFinancialLedger() {
+function generateFinancialLedger(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const inputSheet = ss.getSheetByName("Input"); // Assuming the data is in a sheet named "Input"
   const outputSheet = ss.getSheetByName("Ledger") || ss.insertSheet("Ledger"); // Create or use existing "Ledger" sheet
 
   // Create sheet if it doesn't exist
@@ -304,13 +323,12 @@ function generateFinancialLedger() {
   outputSheet.appendRow(["Date", "Credit", "Debit", "Balance"]);
   outputSheet.getRange(1, 1, 1, 4).setFontWeight("bold");
 
-  const inputData = inputSheet
-    .getRange("A2:G" + inputSheet.getLastRow())
-    .getValues();
+  if (!data.length) return;
+
   let transactions = [];
   let balance = 0;
 
-  inputData.forEach((row) => {
+  data.forEach((row) => {
     const type = row[0]; // Income or Expense
     const description = row[1];
     const amount = row[2];
@@ -319,7 +337,9 @@ function generateFinancialLedger() {
     const frequency = row[5];
 
     // Determine the number of periods and distribute the amounts
-    const periods = getPeriods(startDate, endDate, frequency);
+    const periods =
+      PERIODS[`${startDate}-${endDate}-${frequency}`] ??
+      getPeriods(startDate, endDate, frequency);
 
     periods.forEach((date) => {
       transactions.push({
@@ -333,16 +353,20 @@ function generateFinancialLedger() {
   // Sort transactions by date
   transactions.sort((a, b) => a.date - b.date);
 
+  const result = [];
+
   // Compute the running balance and write to the ledger
   transactions.forEach(({ credit, debit, date }) => {
     balance += credit - debit;
-    outputSheet.appendRow([
+    result.push([
       Utilities.formatDate(date, "GMT", "MM/dd/yyyy"),
       credit ? Number(credit).toFixed(2) : "",
       debit ? `-${Number(debit).toFixed(2)}` : "",
       Number(balance).toFixed(2),
     ]);
   });
+
+  outputSheet.getRange(2, 1, result.length, 4).setValues(result);
 
   outputSheet.autoResizeColumns(1, 4);
 }
