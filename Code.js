@@ -214,7 +214,18 @@ function generateMultiYearBreakdown(
     monthCount
   );
 
-  // Format headers
+  // set currency
+  const generatedValueRange = wsOutput.getRange(3, 2, rowIndex + 10, 13);
+  const values = generatedValueRange.getValues();
+  for (let i = 0; i < values.length; i++) {
+    for (let j = 0; j < values[0].length; j++) {
+      if (values[i][j])
+        generatedValueRange.getCell(i + 1, j + 1).setNumberFormat("$0.00");
+      else generatedValueRange.getCell(i + 1, j + 1).setNumberFormat("0");
+    }
+  }
+
+  // Format table
   wsOutput.getRange(1, 1, 1, monthCount + 2).setFontWeight("bold");
   wsOutput.getDataRange().setFontSize(12);
   wsOutput.autoResizeColumns(1, monthCount + 2);
@@ -375,6 +386,7 @@ function generateFinancialLedger(data) {
     ]);
   });
 
+  outputSheet.getRange(2, 2, result.length, 3).setNumberFormat("$0.00");
   outputSheet.getRange(2, 1, result.length, 4).setValues(result);
   // outputSheet
   //   .getRange(2, 1, result.length, 4)
