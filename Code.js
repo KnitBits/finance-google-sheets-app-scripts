@@ -2,8 +2,6 @@
  * @OnlyCurrentDoc
  */
 
-const PERIODS = {};
-
 function onReportRecalculate() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var wsInput = ss.getSheetByName("Input");
@@ -19,13 +17,13 @@ function onReportRecalculate() {
   var earliestDate = new Date(
     Math.min(...data.map((row) => new Date(row[3])).filter((d) => d.getTime()))
   );
-  var latestDate = new Date(
-    Math.max(...data.map((row) => new Date(row[4])).filter((d) => d.getTime()))
-  );
-  var monthCount =
-    (latestDate.getFullYear() - earliestDate.getFullYear()) * 12 +
-    (latestDate.getMonth() - earliestDate.getMonth()) +
-    1;
+  const latestDate = new Date(earliestDate);
+  latestDate.setFullYear(latestDate.getFullYear() + 1);
+
+  // var latestDate = new Date(
+  //   Math.max(...data.map((row) => new Date(row[4])).filter((d) => d.getTime()))
+  // );
+  var monthCount = 12;
 
   // Set up header row dynamically
   const months = [];
@@ -37,8 +35,12 @@ function onReportRecalculate() {
     );
   }
 
-  const incomeReportToRender = getDataToRender({ incomes }, months);
-  const expenseReportToRender = getDataToRender(expensesGroups, months);
+  const incomeReportToRender = getDataToRender({ incomes }, months, latestDate);
+  const expenseReportToRender = getDataToRender(
+    expensesGroups,
+    months,
+    latestDate
+  );
 
   generateMultiYearBreakdown(
     incomeReportToRender,
@@ -82,7 +84,7 @@ function splitData(data) {
   return { incomes, expensesGroups };
 }
 
-function getDataToRender(groupOfList, months) {
+function getDataToRender(groupOfList, months, limitDate) {
   const zeroValueByMonth = Object.fromEntries(
     months.map((month) => [month, 0])
   );
@@ -104,11 +106,15 @@ function getDataToRender(groupOfList, months) {
       const valueByMonth = { ...zeroValueByMonth };
       let totalAmount = 0;
 
-      const periods = getPeriods(startDate, endDate, frequency);
-      PERIODS[`${startDate}-${endDate}-${frequency}`] = periods;
+      const periods = getPeriods(
+        startDate,
+        endDate > limitDate ? limitDate : endDate,
+        frequency
+      );
 
       periods.forEach((date) => {
         const monthKey = Utilities.formatDate(date, "GMT", "MMM yy");
+        if (!months.includes(monthKey)) return;
         valueByMonth[monthKey] += amount;
         overallTotalAmount[monthKey] += amount;
         totalAmount += amount;
@@ -342,9 +348,7 @@ function generateFinancialLedger(data) {
     const frequency = row[5];
 
     // Determine the number of periods and distribute the amounts
-    const periods =
-      PERIODS[`${startDate}-${endDate}-${frequency}`] ??
-      getPeriods(startDate, endDate, frequency);
+    const periods = getPeriods(startDate, endDate, frequency);
 
     periods.forEach((date) => {
       transactions.push({
