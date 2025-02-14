@@ -392,12 +392,16 @@ function generateFinancialLedger(data) {
   //   .getRange(2, 1, result.length, 4)
   //   .sort({ column: 1, ascending: true });
 
+  // Set the red font color of negative balance
   const balanceColumn = 4;
   const balanceRange = outputSheet.getRange(2, balanceColumn, result.length, 1);
   const balanceValues = balanceRange.getValues();
   balanceValues.forEach((row, index) => {
     if (row[0] < 0) balanceRange.getCell(index + 1, 1).setFontColor("red");
   });
+
+  // Set the DD/MM/YYYY format to 'date' column
+  outputSheet.getRange(2, 1, result.length, 1).setNumberFormat("DD/MM/YYYY");
 
   outputSheet.getDataRange().setFontSize(12);
   outputSheet.autoResizeColumns(1, 4);
