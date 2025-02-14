@@ -380,6 +380,13 @@ function generateFinancialLedger(data) {
   //   .getRange(2, 1, result.length, 4)
   //   .sort({ column: 1, ascending: true });
 
+  const balanceColumn = 4;
+  const balanceRange = outputSheet.getRange(2, balanceColumn, result.length, 1);
+  const balanceValues = balanceRange.getValues();
+  balanceValues.forEach((row, index) => {
+    if (row[0] < 0) balanceRange.getCell(index + 1, 1).setFontColor("red");
+  });
+
   outputSheet.getDataRange().setFontSize(12);
   outputSheet.autoResizeColumns(1, 4);
 }
