@@ -1,3 +1,7 @@
+/**
+ * @OnlyCurrentDoc
+ */
+
 const PERIODS = {};
 
 function onReportRecalculate() {
@@ -206,6 +210,7 @@ function generateMultiYearBreakdown(
 
   // Format headers
   wsOutput.getRange(1, 1, 1, monthCount + 2).setFontWeight("bold");
+  wsOutput.getDataRange().setFontSize(12);
   wsOutput.autoResizeColumns(1, monthCount + 2);
 }
 
@@ -367,7 +372,11 @@ function generateFinancialLedger(data) {
   });
 
   outputSheet.getRange(2, 1, result.length, 4).setValues(result);
+  // outputSheet
+  //   .getRange(2, 1, result.length, 4)
+  //   .sort({ column: 1, ascending: true });
 
+  outputSheet.getDataRange().setFontSize(12);
   outputSheet.autoResizeColumns(1, 4);
 }
 
