@@ -418,7 +418,7 @@ function getPeriods(start, end, frequency) {
       case "Weekly":
         currentDate.setDate(currentDate.getDate() + 7);
         break;
-      case "Bi-Weekly":
+      case "Fortnightly":
         currentDate.setDate(currentDate.getDate() + 14);
         break;
       case "Monthly":
